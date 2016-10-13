@@ -1,31 +1,36 @@
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
-import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.framework.recipes.leader.LeaderLatch
+import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.CreateMode
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Future
-import scala.concurrent._
-import ExecutionContext.Implicits.global
+
 
 /**
   * Created by revenskiy_ag on 12.10.16.
   */
-class ZooTree(client: CuratorFramework, val masterPathName: String, val participantPathName: String) {
-  createPathIfItNotExists(masterPathName)
+class ZooTree(connectionString: String, val participantPathName: String) {
+  private def newConnectionClient = {
+    CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(1000, 3))
+  }
+
+  private val client = {
+    val clt = newConnectionClient
+    clt.start()
+    clt.getZookeeperClient.blockUntilConnectedOrTimedOut()
+    clt
+  }
   createPathIfItNotExists(participantPathName)
 
-  val participants: ArrayBuffer[LeaderLatch] = new ArrayBuffer[LeaderLatch]
-  val masters: ArrayBuffer[String] = new ArrayBuffer[String]
-
+  def close() = client.close()
 
   private def createPathIfItNotExists(path: String) = {
-    val masterPathOpt = Option(client.checkExists().forPath(path))
-    if (masterPathOpt.isDefined) path else client.create().forPath(path)
+    val pathOpt = Option(client.checkExists().forPath(path))
+    if (pathOpt.isDefined) path else client.create().forPath(path)
   }
 
   private def objectToByteArray(obj: Any): Array[Byte] = {
@@ -44,120 +49,64 @@ class ZooTree(client: CuratorFramework, val masterPathName: String, val particip
     }
   }
 
-  def addParticipant(masterId: String): String = {
-    val masterData = objectToByteArray(masterId)
+  def addParticipant(): String = {
     val participantId = client.create
       .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-      .forPath(s"$participantPathName/",masterId.getBytes(Charset.defaultCharset()))
-   // val participantLeader: LeaderLatch = new LeaderLatch(client, participantId)
-    //participants += participantLeader
-
-//    participantLeader.start()
-//    participantLeader.close()
-//
-//    println(participantLeader.getParticipants)
-
-    //println(participantLeader.getId)
-
+      .forPath(s"$participantPathName/",Array[Byte]())
     participantId
   }
 
-  val participantAgents: TrieMap[String, ArrayBuffer[Agent]] = new TrieMap[String, ArrayBuffer[Agent]]()
+  private var participantAgents:
+  TrieMap[String, ArrayBuffer[LeaderLatchExample]] = new TrieMap[String, ArrayBuffer[LeaderLatchExample]]()
+
+  private val connectionPerAgent:
+  TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
+
+
   def addAgentToParicipant(participantId: String, agent: Agent): Unit =
   {
-    val agentPathName = s"$participantId/${agent.toString}"
-    val agentPath = client.create
-      .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-      .forPath(agentPathName, agent.serialize)
-    val agentInVoting = new LeaderLatch(client, participantId, agent.toString)
-    participants += agentInVoting
+    val client = if (connectionPerAgent.isDefinedAt(agent)) connectionPerAgent(agent) else {
+      val clnt = newConnectionClient
+      connectionPerAgent += ((agent,clnt))
+      clnt.start()
+      clnt.getZookeeperClient.blockUntilConnectedOrTimedOut()
+      clnt
+    }
 
-    import collection.JavaConverters._
+      val agentPathName = s"$participantId/${agent.toString}"
+      val agentPath = client.create
+        .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+        .forPath(agentPathName, agent.serialize)
 
+      val agentInVoting = new LeaderLatchExample(client, participantId, agent.toString)
+      agentInVoting.start()
 
-   // println()
-
-    //Thread.sleep(1000);
-   //agentInVoting.close()
-
-    if (participantAgents.isDefinedAt(participantId))
-      participantAgents(participantId) += agent
-    else participantAgents += ((participantId, ArrayBuffer(agent)))
+      if (participantAgents.isDefinedAt(participantId))
+        participantAgents(participantId) += agentInVoting
+      else participantAgents += ((participantId, ArrayBuffer(agentInVoting)))
   }
 
-
-  def chooseLeaderOfParcipant(participantId: String) = {
-    import collection.JavaConverters._
-//        val participantLeader: LeaderLatch = new LeaderLatch(client, participantId)
-//         participantLeader.start()
-//        participantLeader.close()
-//        println(participantLeader.getLeader.getId)
-
-
-
-//    val election = participantAgents(participantId).map(agent => new LeaderLatch(client, participantId, agent.toString))
-//    election foreach { leader =>
-//      leader.start()
-//
-//    }
-//
-//    Thread.sleep(10);
-
-//    election.init foreach { leader =>
-//      println(leader.getLeader.getId)
-//      leader.close()
-//    }
-
-    //println(election.g)
-
-
-//    election foreach { leader =>
-//      for (i <- 1 to 20) {
-//        println(leader.getLeader)
-//        Thread.sleep(100)
-//      }
-//      leader.close()
-//    }
-
-//    participantLeader.start()
-//    participantLeader.await()
-//
-//    println(participantLeader.getLeader.getId)
-//
-//    election foreach { leader =>
-//      leader.close()
-//    }
-    println()
-   true
-
+  def closeAgent(agent: Agent):Unit = {
+    participantAgents = participantAgents.transform{(_,agentsInElection) =>
+      val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.name == agent.toString)
+      agentToCloseOpt match {
+        case Some(agentToClose) => agentToClose.close; agentsInElection -= agentToClose
+        case None => agentsInElection
+      }
+    }
+    connectionPerAgent remove agent foreach(_.close())
   }
 
-  def addMaster(): String = {
-    val masterId = client.create.withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(s"$masterPathName/", Array[Byte]())
-    masters += masterId
-    masterId
-  }
-
-  def getMasterData(masterId: String): Agent = {
-    val data: Array[Byte] = client.getData.forPath(masterId)
-    Agent.deserialize(data)
-  }
-
-  def setMasterData(masterId: String, agent: Agent) = {
-    client.setData().forPath(masterId, agent.serialize)
+  def printParticipantAgents() = {
+    participantAgents foreach{case (participantId,agents)=>
+      agents foreach { agent =>
+        println(s"$participantId/${agent.name}\t has leader ${agent.currentLeader.getId}")
+      }
+    }
   }
 
   def getParticipantData(participantId: String): String = {
     val data: Array[Byte] = client.getData.forPath(participantId)
     new String(data, Charset.defaultCharset())
   }
-
-  def setParticipantData(participantId: String, masterId: String) = {
-    val participantData = objectToByteArray(participantId)
-    client.setData.forPath(masterId: String, participantData)
-  }
-}
-
-private object ZooTree{
-  val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
 }
