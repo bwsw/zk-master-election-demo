@@ -2,12 +2,13 @@ import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
-import org.apache.curator.framework.recipes.leader.LeaderLatch
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.CreateMode
 
+import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 
 /**
@@ -26,7 +27,10 @@ class ZooTree(connectionString: String, val participantPathName: String) {
   }
   createPathIfItNotExists(participantPathName)
 
-  def close() = client.close()
+  def close() = {
+    connectionPerAgent.keys.foreach(closeAgent)
+    client.close()
+  }
 
   private def createPathIfItNotExists(path: String) = {
     val pathOpt = Option(client.checkExists().forPath(path))
@@ -56,7 +60,7 @@ class ZooTree(connectionString: String, val participantPathName: String) {
     participantId
   }
 
-  private var participantAgents:
+  private val participantAgents:
   TrieMap[String, ArrayBuffer[LeaderLatchExample]] = new TrieMap[String, ArrayBuffer[LeaderLatchExample]]()
 
   private val connectionPerAgent:
@@ -87,14 +91,16 @@ class ZooTree(connectionString: String, val participantPathName: String) {
   }
 
   def closeAgent(agent: Agent):Unit = {
-    participantAgents = participantAgents.transform{(_,agentsInElection) =>
+    participantAgents.foreach{case(_,agentsInElection) =>
       val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.name == agent.toString)
       agentToCloseOpt match {
-        case Some(agentToClose) => agentToClose.close; agentsInElection -= agentToClose
+        case Some(agentToClose) => {
+          agentToClose.close
+          agentsInElection -= agentToClose}
         case None => agentsInElection
       }
     }
-    connectionPerAgent remove agent foreach(_.close())
+    connectionPerAgent remove agent foreach(_.close)
   }
 
   def printParticipantAgents() = {
@@ -108,5 +114,22 @@ class ZooTree(connectionString: String, val participantPathName: String) {
   def getParticipantData(participantId: String): String = {
     val data: Array[Byte] = client.getData.forPath(participantId)
     new String(data, Charset.defaultCharset())
+  }
+
+  def isAllParticipantsAgentsHaveTheSameLeader: Boolean = {
+    val agentsInVotingOfParticipants = participantAgents.values
+
+    @tailrec
+    def helper(lst: List[LeaderLatchExample], leader: LeaderLatchExample): Boolean = lst match {
+      case Nil => true
+      case head::tail => if (head.currentLeader == leader.currentLeader) helper(tail,leader) else false
+    }
+
+    var isTheSameLeader = true
+      for (agentsInVoting <- agentsInVotingOfParticipants) {
+        val lst= agentsInVoting.toList
+        isTheSameLeader = if (lst.nonEmpty) helper(lst.tail, lst.head) else true
+      }
+    isTheSameLeader
   }
 }

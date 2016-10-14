@@ -14,8 +14,8 @@ object Main extends App{
 
   val zoo = new ZooTree(zookeeperConnectionString, "/participant")
 
-  val participant1 = zoo.addParticipant
-  val participant2 = zoo.addParticipant
+  val participant1 = zoo.addParticipant()
+  val participant2 = zoo.addParticipant()
 
 
   val agent1 = Agent("192.168.0.1","1111","1")
@@ -37,15 +37,12 @@ object Main extends App{
   zoo.addAgentToParicipant(participant2,agent5)
 
   zoo.printParticipantAgents()
-  println()
 
   zoo.closeAgent(agent2)
   zoo.closeAgent(agent1)
 
   zoo.addAgentToParicipant(participant1,agent7)
   zoo.addAgentToParicipant(participant2,agent7)
-
-  zoo.printParticipantAgents()
 
   zoo.close()
 }
