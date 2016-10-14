@@ -27,8 +27,8 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
   createPathIfItNotExists(partitionPathName)
 
   def close() = {
-    connectionPerAgent.keys.foreach(closeAgent)
     client.close()
+    connectionPerAgent.keys.foreach(closeAgent)
   }
 
   private def createPathIfItNotExists(path: String) = {
@@ -53,44 +53,40 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
   }
 
   def addPartition(): String = {
-    val participantId = client.create
+    val patritionId = client.create
       .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
       .forPath(s"$partitionPathName/",Array[Byte]())
-    participantId
+    patritionId
   }
 
-  private val participantAgents:
+  private val patritionAgents:
   TrieMap[String, ArrayBuffer[LeaderLatch]] = new TrieMap[String, ArrayBuffer[LeaderLatch]]()
 
   private val connectionPerAgent:
   TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
 
 
-  def addAgentToParicipant(participantId: String, agent: Agent): Unit =
-  {
-    val client = if (connectionPerAgent.isDefinedAt(agent)) connectionPerAgent(agent) else {
+  def addAgentToPartrition(patritionId: String, agent: Agent): Unit = {
+    val client = if (connectionPerAgent.isDefinedAt(agent)) connectionPerAgent(agent)
+    else {
       val clnt = newConnectionClient
-      connectionPerAgent += ((agent,clnt))
+      connectionPerAgent += ((agent, clnt))
       clnt.start()
       clnt.getZookeeperClient.blockUntilConnectedOrTimedOut()
       clnt
     }
 
-      val agentPathName = s"$participantId/${agent.toString}"
-      val agentPath = client.create
-        .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-        .forPath(agentPathName, agent.serialize)
 
-      val agentInVoting = new LeaderLatch(client, participantId, agent.toString)
-      agentInVoting.start()
+    val agentInVoting = new LeaderLatch(client, patritionId, agent.toString)
+    agentInVoting.start()
 
-      if (participantAgents.isDefinedAt(participantId))
-        participantAgents(participantId) += agentInVoting
-      else participantAgents += ((participantId, ArrayBuffer(agentInVoting)))
+    if (patritionAgents.isDefinedAt(patritionId))
+      patritionAgents(patritionId) += agentInVoting
+    else patritionAgents += ((patritionId, ArrayBuffer(agentInVoting)))
   }
 
   def closeAgent(agent: Agent):Unit = {
-    participantAgents.foreach{case(_,agentsInElection) =>
+    patritionAgents.foreach{case(_,agentsInElection) =>
       val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.getId == agent.toString)
       agentToCloseOpt match {
         case Some(agentToClose) => {
@@ -102,21 +98,16 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
     connectionPerAgent remove agent foreach(_.close)
   }
 
-  def printParticipantAgents() = {
-    participantAgents foreach{case (participantId,agents)=>
+  def printPatritionAgents() = {
+    patritionAgents foreach{case (participantId,agents)=>
       agents foreach { agent =>
         println(s"$participantId/${agent.getId}\t has leader ${agent.getLeader.getId}")
       }
     }
   }
 
-  def getParticipantData(participantId: String): String = {
-    val data: Array[Byte] = client.getData.forPath(participantId)
-    new String(data, Charset.defaultCharset())
-  }
-
-  def isAllParticipantsAgentsHaveTheSameLeader: Boolean = {
-    val agentsInVotingOfParticipants = participantAgents.values
+  def isAllPatritionsAgentsHaveTheSameLeader: Boolean = {
+    val agentsInVotingOfParticipants = patritionAgents.values
 
     @tailrec
     def helper(lst: List[LeaderLatch], leader: LeaderLatch): Boolean = lst match {
