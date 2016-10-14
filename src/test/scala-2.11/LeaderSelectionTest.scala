@@ -11,8 +11,8 @@ class LeaderSelectionTest extends FlatSpec with Matchers {
     val zookeeperConnectionString = "172.17.0.2:2181"
     val zoo = new ZooTree(zookeeperConnectionString, "/participant")
 
-    val participant1 = zoo.addParticipant()
-    val participant2 = zoo.addParticipant()
+    val participant1 = zoo.addPartition()
+    val participant2 = zoo.addPartition()
 
 
     val agent1 = Agent("192.168.0.1","1111","1")

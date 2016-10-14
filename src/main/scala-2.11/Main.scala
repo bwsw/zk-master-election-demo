@@ -1,21 +1,13 @@
-import org.apache.curator.framework.CuratorFrameworkFactory
-import org.apache.curator.framework.recipes.leader.LeaderLatch
-import org.apache.curator.retry.ExponentialBackoffRetry
-import org.apache.curator.{RetryPolicy, RetrySleeper}
-import org.apache.zookeeper.CreateMode
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
 
-/**
-  * Created by revenskiy_ag on 12.10.16.
-  */
+
+
 object Main extends App{
   val zookeeperConnectionString = "172.17.0.2:2181"
 
   val zoo = new ZooTree(zookeeperConnectionString, "/participant")
 
-  val participant1 = zoo.addParticipant()
-  val participant2 = zoo.addParticipant()
+  val participant1 = zoo.addPartition()
+  val participant2 = zoo.addPartition()
 
 
   val agent1 = Agent("192.168.0.1","1111","1")

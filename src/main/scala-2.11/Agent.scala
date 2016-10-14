@@ -1,8 +1,6 @@
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-/**
-  * Created by revenskiy_ag on 12.10.16.
-  */
+
 trait Agent extends Serializable {
   val address: String
   val port: String

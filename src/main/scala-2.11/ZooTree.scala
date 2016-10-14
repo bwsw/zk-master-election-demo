@@ -1,6 +1,6 @@
 import java.nio.charset.Charset
-import java.util.concurrent.TimeUnit
 
+import org.apache.curator.framework.recipes.leader.LeaderLatch
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.CreateMode
@@ -8,13 +8,12 @@ import org.apache.zookeeper.CreateMode
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 
 
 /**
   * Created by revenskiy_ag on 12.10.16.
   */
-class ZooTree(connectionString: String, val participantPathName: String) {
+class ZooTree(connectionString: String, val partitionPathName: String) {
   private def newConnectionClient = {
     CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(1000, 3))
   }
@@ -25,7 +24,7 @@ class ZooTree(connectionString: String, val participantPathName: String) {
     clt.getZookeeperClient.blockUntilConnectedOrTimedOut()
     clt
   }
-  createPathIfItNotExists(participantPathName)
+  createPathIfItNotExists(partitionPathName)
 
   def close() = {
     connectionPerAgent.keys.foreach(closeAgent)
@@ -53,15 +52,15 @@ class ZooTree(connectionString: String, val participantPathName: String) {
     }
   }
 
-  def addParticipant(): String = {
+  def addPartition(): String = {
     val participantId = client.create
       .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-      .forPath(s"$participantPathName/",Array[Byte]())
+      .forPath(s"$partitionPathName/",Array[Byte]())
     participantId
   }
 
   private val participantAgents:
-  TrieMap[String, ArrayBuffer[LeaderLatchExample]] = new TrieMap[String, ArrayBuffer[LeaderLatchExample]]()
+  TrieMap[String, ArrayBuffer[LeaderLatch]] = new TrieMap[String, ArrayBuffer[LeaderLatch]]()
 
   private val connectionPerAgent:
   TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
@@ -82,7 +81,7 @@ class ZooTree(connectionString: String, val participantPathName: String) {
         .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
         .forPath(agentPathName, agent.serialize)
 
-      val agentInVoting = new LeaderLatchExample(client, participantId, agent.toString)
+      val agentInVoting = new LeaderLatch(client, participantId, agent.toString)
       agentInVoting.start()
 
       if (participantAgents.isDefinedAt(participantId))
@@ -92,7 +91,7 @@ class ZooTree(connectionString: String, val participantPathName: String) {
 
   def closeAgent(agent: Agent):Unit = {
     participantAgents.foreach{case(_,agentsInElection) =>
-      val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.name == agent.toString)
+      val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.getId == agent.toString)
       agentToCloseOpt match {
         case Some(agentToClose) => {
           agentToClose.close
@@ -106,7 +105,7 @@ class ZooTree(connectionString: String, val participantPathName: String) {
   def printParticipantAgents() = {
     participantAgents foreach{case (participantId,agents)=>
       agents foreach { agent =>
-        println(s"$participantId/${agent.name}\t has leader ${agent.currentLeader.getId}")
+        println(s"$participantId/${agent.getId}\t has leader ${agent.getLeader.getId}")
       }
     }
   }
@@ -120,9 +119,9 @@ class ZooTree(connectionString: String, val participantPathName: String) {
     val agentsInVotingOfParticipants = participantAgents.values
 
     @tailrec
-    def helper(lst: List[LeaderLatchExample], leader: LeaderLatchExample): Boolean = lst match {
+    def helper(lst: List[LeaderLatch], leader: LeaderLatch): Boolean = lst match {
       case Nil => true
-      case head::tail => if (head.currentLeader == leader.currentLeader) helper(tail,leader) else false
+      case head::tail => if (head.getLeader == leader.getLeader) helper(tail,leader) else false
     }
 
     var isTheSameLeader = true
