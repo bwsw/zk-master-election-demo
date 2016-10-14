@@ -7,33 +7,45 @@ import org.apache.zookeeper.CreateMode
 
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 
 /**
   * Created by revenskiy_ag on 12.10.16.
   */
-class ZooTree(connectionString: String, val partitionPathName: String) {
+class Stream(connectionString: String, val rootPath: String) {
+  import ZooTree._
+
+  val partitions: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
+
+  def this(connectionString: String, rootPath: String, partitionNumber: Int) = {
+    this(connectionString, rootPath)
+    (1 to partitionNumber) foreach (_=> addPartition())
+  }
+
   private def newConnectionClient = {
     CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(1000, 3))
   }
 
-  private val client = {
+
+  val client = {
     val clt = newConnectionClient
     clt.start()
     clt.getZookeeperClient.blockUntilConnectedOrTimedOut()
     clt
   }
-  createPathIfItNotExists(partitionPathName)
+
+  def idOfNode(path: String) = path.substring(path.lastIndexOf("/") + 1)
+  val streamPathName = idOfNode(createPathIfItNotExists(rootPath))
 
   def close() = {
     client.close()
-    connectionPerAgent.keys.foreach(closeAgent)
   }
 
-  private def createPathIfItNotExists(path: String) = {
+  private def createPathIfItNotExists(path: String):String = {
     val pathOpt = Option(client.checkExists().forPath(path))
-    if (pathOpt.isDefined) path else client.create().forPath(path)
+    if (pathOpt.isDefined) path
+    else client.create().withMode(CreateMode.PERSISTENT).forPath(path)
   }
 
   private def objectToByteArray(obj: Any): Array[Byte] = {
@@ -55,15 +67,13 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
   def addPartition(): String = {
     val patritionId = client.create
       .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
-      .forPath(s"$partitionPathName/",Array[Byte]())
+      .forPath(s"$rootPath/",Array[Byte]())
+    partitions += patritionId
     patritionId
   }
 
   private val patritionAgents:
-  TrieMap[String, ArrayBuffer[LeaderLatch]] = new TrieMap[String, ArrayBuffer[LeaderLatch]]()
-
-  private val connectionPerAgent:
-  TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
+  TrieMap[String,  mutable.ArrayBuffer[LeaderLatch]] = new TrieMap[String,  mutable.ArrayBuffer[LeaderLatch]]()
 
 
   def addAgentToPartrition(patritionId: String, agent: Agent): Unit = {
@@ -82,7 +92,7 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
 
     if (patritionAgents.isDefinedAt(patritionId))
       patritionAgents(patritionId) += agentInVoting
-    else patritionAgents += ((patritionId, ArrayBuffer(agentInVoting)))
+    else patritionAgents += ((patritionId,  mutable.ArrayBuffer(agentInVoting)))
   }
 
   def closeAgent(agent: Agent):Unit = {
@@ -95,7 +105,6 @@ class ZooTree(connectionString: String, val partitionPathName: String) {
         case None => agentsInElection
       }
     }
-    connectionPerAgent remove agent foreach(_.close)
   }
 
   def printPatritionAgents() = {
