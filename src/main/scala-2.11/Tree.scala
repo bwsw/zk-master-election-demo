@@ -62,22 +62,11 @@ class ZooTree(connectionString: String) extends Tree
     }
   }
 
+  def closeAgent(agent:Agent): Unit = streams.foreach(stream=> stream.closeAgent(agent))
+
   def close() = {
-    import ZooTree.connectionPerAgent
-    streams.foreach{stream =>
-      agents.foreach(stream.closeAgent)
-      stream.close()
-    }
-    // errors on closing
-    connectionPerAgent.values.foreach(_.close())
+    streams.foreach(_.close())
+    Stream.connectionPerAgent.values.foreach(_.close())
   }
 
-}
-
-private object ZooTree {
-  import org.apache.curator.framework.CuratorFramework
-  import scala.collection.concurrent.TrieMap
-
-  val connectionPerAgent:
-  TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
 }

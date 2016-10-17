@@ -14,7 +14,7 @@ import scala.collection.mutable
   * Created by revenskiy_ag on 12.10.16.
   */
 class Stream(connectionString: String, val rootPath: String) {
-  import ZooTree._
+  import Stream._
 
   val partitions: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
 
@@ -39,6 +39,7 @@ class Stream(connectionString: String, val rootPath: String) {
   val streamPathName = idOfNode(createPathIfItNotExists(rootPath))
 
   def close() = {
+    patritionAgents.values.foreach{agent=> agent.foreach(_.close())}
     client.close()
   }
 
@@ -128,7 +129,16 @@ class Stream(connectionString: String, val rootPath: String) {
       for (agentsInVoting <- agentsInVotingOfParticipants) {
         val lst= agentsInVoting.toList
         isTheSameLeader = if (lst.nonEmpty) helper(lst.tail, lst.head) else true
+        if (!isTheSameLeader) {isTheSameLeader = false; return isTheSameLeader}
       }
     isTheSameLeader
   }
+}
+
+private object Stream {
+  import org.apache.curator.framework.CuratorFramework
+  import scala.collection.concurrent.TrieMap
+
+  val connectionPerAgent:
+  TrieMap[Agent, CuratorFramework] = new TrieMap[Agent, CuratorFramework]()
 }

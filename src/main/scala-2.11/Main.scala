@@ -24,11 +24,5 @@ object Main extends App{
   val randomParticipants2 = util.Random.shuffle(participants).take(15)
   tree.addAgent(agent2,"stream_1", randomParticipants2)
 
-
-
-  tree.streams foreach {x => x.printPatritionAgents(); println()}
-
-
   tree.close()
-
 }
