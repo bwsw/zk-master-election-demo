@@ -9,7 +9,7 @@ class LeaderSelectionTest extends FlatSpec with Matchers {
 
   "A leader/master" should "be selected in such way, that agents in a partition have the same leader" in {
     val zookeeperConnectionString = "172.17.0.2:2181"
-    val zoo = new ZooTree(zookeeperConnectionString, "/participant")
+    val zoo = new Stream(zookeeperConnectionString, "/participant")
 
     val partition1 = zoo.addPartition()
     val partition2 = zoo.addPartition()

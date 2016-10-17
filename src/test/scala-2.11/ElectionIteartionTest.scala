@@ -9,11 +9,11 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
 
   "A election process" should "be stable to n-iterations for 2 partitions" in {
     val zookeeperConnectionString = "172.17.0.2:2181"
-    val zoo = new ZooTree(zookeeperConnectionString, "/participant")
+    val zoo = new Stream(zookeeperConnectionString, "/participant")
     val patrition1 = zoo.addPartition()
     val patrition2 = zoo.addPartition()
 
-    val iterationNumber = 50
+    val iterationNumber = 25
     (1 to iterationNumber).foreach{_=>
       val agent = Agent(Random.nextInt(10).toString, Random.nextInt(4).toString, Random.nextInt(2).toString)
 
@@ -27,11 +27,11 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
 
   it should "be stable to n-iterations for 2 partitions and closing of agents" in {
     val zookeeperConnectionString = "172.17.0.2:2181"
-    val zoo = new ZooTree(zookeeperConnectionString, "/participant")
+    val zoo = new Stream(zookeeperConnectionString, "/participant")
     val patrition1 = zoo.addPartition()
     val patrition2 = zoo.addPartition()
 
-    val iterationNumber = 50
+    val iterationNumber = 25
     val agents = (1 to iterationNumber).toList.map { _ =>
       val agent = Agent(Random.nextInt(10000).toString, Random.nextInt(4000).toString, Random.nextInt(2).toString)
 
