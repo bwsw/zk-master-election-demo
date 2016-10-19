@@ -39,7 +39,7 @@ class Stream(connectionString: String, val rootPath: String) {
   val streamPathName = idOfNode(createPathIfItNotExists(rootPath))
 
   def close() = {
-    patritionAgents.values.foreach{agent=> agent.foreach(_.close())}
+    partitionAgents.values.foreach{agent=> agent.foreach(_.close())}
     client.close()
   }
 
@@ -73,11 +73,30 @@ class Stream(connectionString: String, val rootPath: String) {
     patritionId
   }
 
-  private val patritionAgents:
+  private val partitionAgents:
   TrieMap[String,  mutable.ArrayBuffer[LeaderLatch]] = new TrieMap[String,  mutable.ArrayBuffer[LeaderLatch]]()
 
 
-  def addAgentToPartrition(patritionId: String, agent: Agent): Unit = {
+  private def reoderLeaderLatchAgents(partitionId: String,
+                          agents: mutable.ArrayBuffer[LeaderLatch]): mutable.ArrayBuffer[LeaderLatch] =
+  {
+    val agentsName = agents.map(_.getId)
+    val connections = agentsName.map{agentConnection=>
+      val connectionByAgentName = connectionPerAgent.find{case (agent,_) => agent.toString == agentConnection}
+      (agentConnection, connectionByAgentName.get._2)
+    }
+
+    agents foreach(_.close())
+
+    scala.util.Random.shuffle(
+      connections.map{case (agentName, client)=>
+        val agentInVoting = new LeaderLatch(client, partitionId, agentName)
+        agentInVoting.start()
+        agentInVoting
+      })
+  }
+
+  def addAgentToPartition(partitionId: String, agent: Agent): Unit = {
     val client = if (connectionPerAgent.isDefinedAt(agent)) connectionPerAgent(agent)
     else {
       val clnt = newConnectionClient
@@ -87,17 +106,21 @@ class Stream(connectionString: String, val rootPath: String) {
       clnt
     }
 
+    val agentInVoting = new LeaderLatch(client, partitionId, agent.toString)
 
-    val agentInVoting = new LeaderLatch(client, patritionId, agent.toString)
+
+    if (partitionAgents.isDefinedAt(partitionId)) {
+      partitionAgents(partitionId) = reoderLeaderLatchAgents(partitionId, partitionAgents(partitionId))
+      partitionAgents(partitionId) += agentInVoting
+    }
+    else partitionAgents += ((partitionId,  mutable.ArrayBuffer(agentInVoting)))
+
+    Thread.sleep(10)
     agentInVoting.start()
-
-    if (patritionAgents.isDefinedAt(patritionId))
-      patritionAgents(patritionId) += agentInVoting
-    else patritionAgents += ((patritionId,  mutable.ArrayBuffer(agentInVoting)))
   }
 
   def closeAgent(agent: Agent):Unit = {
-    patritionAgents.foreach{case(_,agentsInElection) =>
+    partitionAgents.foreach{case(_,agentsInElection) =>
       val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.getId == agent.toString)
       agentToCloseOpt match {
         case Some(agentToClose) => {
@@ -109,7 +132,7 @@ class Stream(connectionString: String, val rootPath: String) {
   }
 
   def printPatritionAgents() = {
-    patritionAgents foreach{case (participantId,agents)=>
+    partitionAgents foreach{case (participantId,agents)=>
       agents foreach { agent =>
         println(s"$participantId/${agent.getId}\t has leader ${agent.getLeader.getId}")
       }
@@ -117,7 +140,7 @@ class Stream(connectionString: String, val rootPath: String) {
   }
 
   def isAllPatritionsAgentsHaveTheSameLeader: Boolean = {
-    val agentsInVotingOfParticipants = patritionAgents.values
+    val agentsInVotingOfParticipants = partitionAgents.values
 
     @tailrec
     def helper(lst: List[LeaderLatch], leader: LeaderLatch): Boolean = lst match {

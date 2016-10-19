@@ -23,19 +23,19 @@ class LeaderSelectionTest extends FlatSpec with Matchers {
     val agent6 = Agent("192.168.0.6","6666","1")
     val agent7 = Agent("192.168.0.7","7777","1")
 
-    zoo.addAgentToPartrition(partition1,agent1)
-    zoo.addAgentToPartrition(partition1,agent2)
-    zoo.addAgentToPartrition(partition1,agent3)
-    zoo.addAgentToPartrition(partition1,agent4)
+    zoo.addAgentToPartition(partition1,agent1)
+    zoo.addAgentToPartition(partition1,agent2)
+    zoo.addAgentToPartition(partition1,agent3)
+    zoo.addAgentToPartition(partition1,agent4)
 
 
-    zoo.addAgentToPartrition(partition2,agent1)
-    zoo.addAgentToPartrition(partition2,agent4)
-    zoo.addAgentToPartrition(partition2,agent5)
-    zoo.addAgentToPartrition(partition1,agent7)
-    zoo.addAgentToPartrition(partition2,agent7)
+    zoo.addAgentToPartition(partition2,agent1)
+    zoo.addAgentToPartition(partition2,agent4)
+    zoo.addAgentToPartition(partition2,agent5)
+    zoo.addAgentToPartition(partition1,agent7)
+    zoo.addAgentToPartition(partition2,agent7)
 
-    zoo.close()
     zoo.isAllPatritionsAgentsHaveTheSameLeader shouldBe true
+    zoo.close()
   }
 }
