@@ -8,21 +8,20 @@ import org.apache.curator.utils.ThreadUtils
 import scala.collection.mutable.ArrayBuffer
 
 object MyLeaderSelector extends App {
-  private val CLIENT_QTY: Int = 2
+  private val CLIENT_QTY: Int = 1
   private val PATH: String = "/examples/leader"
   // all of the useful sample code is in ExampleClient.java
   System.out.println("Create " + CLIENT_QTY + " clients, have each negotiate for leadership and then wait a random number of seconds before letting another leader election occur.")
   System.out.println("Notice that leader election is fair: all clients will become leader and will do so the same number of times.")
 
-  val serivce = Executors.newSingleThreadExecutor()
 
   val clients: ArrayBuffer[CuratorFramework] = ArrayBuffer()
   val examples: ArrayBuffer[MyLeaderSelectorClient] = ArrayBuffer()
   val connectionString = "172.17.0.2:2181"
   try {
-    (1 to CLIENT_QTY) foreach { i =>
+    (0 to CLIENT_QTY) foreach { i =>
       val client = CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(100, 2))
-      val example = new MyLeaderSelectorClient(client, PATH, "Client #" + i,serivce)
+      val example = new MyLeaderSelectorClient(client, PATH, "Client #" + i)
 
       clients += client
       examples += example
@@ -32,26 +31,33 @@ object MyLeaderSelector extends App {
     }
   }
 
-  examples foreach(example=> println(example.leaderSelector.getLeader))
+
+  val currentLeader = examples.head.getLeader.getId
+
+  val exampleOldLeaderIndex = examples.indexWhere(_.id == currentLeader)
+  val exampleNewLeaderIndex = if (exampleOldLeaderIndex == 1) 0 else 1
+
+  examples foreach(example=> println(example.getLeader))
   println()
 
-  examples(0).release()
-  Thread.sleep(300)
-  examples(0).reset()
+  examples(exampleOldLeaderIndex).release()
 
-
-  examples foreach(example=> println(example.leaderSelector.getLeader))
+  examples foreach(example=> println(example.getLeader))
   println()
 
-  examples(1).release()
-  Thread.sleep(300)
-  examples(1).reset()
+  examples(exampleNewLeaderIndex).release()
 
-  examples(1).leaderSelector.requeue()
-  Thread.sleep(300)
+  examples(exampleOldLeaderIndex).requeue
 
-  examples foreach(example=> println(example.leaderSelector.getLeader))
+  examples foreach(example=> println(example.getLeader))
   println()
+
+ // examples(1).release()
+
+  //examples(0).requeue
+
+//  println()
+//  examples foreach(example=> println(example.getLeader))
 
 //  examples(2).release()
 //  Thread.sleep(300)

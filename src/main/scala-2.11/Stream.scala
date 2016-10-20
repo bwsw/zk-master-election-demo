@@ -66,11 +66,11 @@ class Stream(connectionString: String, val rootPath: String) {
   }
 
   def addPartition(): String = {
-    val patritionId = client.create
+    val partitionId = client.create
       .withMode(CreateMode.PERSISTENT_SEQUENTIAL)
       .forPath(s"$rootPath/",Array[Byte]())
-    partitions += patritionId
-    patritionId
+    partitions += partitionId
+    partitionId
   }
 
   private val partitionAgents:
