@@ -5,6 +5,7 @@ trait Agent extends Serializable {
   val address: String
   val port: String
   val id: String
+  val priority: Agent.Priority.Value
 
   def serialize = {
     val bytes = new ByteArrayOutputStream()
@@ -21,20 +22,31 @@ trait Agent extends Serializable {
       (that canEqual this) &&
         address == that.address &&
         port == that.port &&
-        id == that.id
+        id == that.id &&
+        priority == that.priority
     }
     case _ => false
   }
-  override def toString: String = s"$address:$port{$id}"
+
+  def name = s"$address:$port(version:$id) and it's priority is: $priority"
+  override def toString: String = s"$address:$port(version:$id)"
 }
 
 
 object Agent {
-  def apply(addressNew:String,portNew:String,idNew:String) = new Agent{
+  object Priority extends Enumeration {
+    val Normal, Low = Value
+  }
+
+  def apply(addressNew: String, portNew: String, idNew: String,
+            priorityNew: Priority.Value = Priority.Low) = new Agent
+  {
     val address = addressNew
     val port = portNew
     val id   = idNew
+    val priority = priorityNew
   }
+
   def deserialize(bytes: Array[Byte]): Agent = {
     val bais = new ByteArrayInputStream(bytes)
     val bytesOfObject = new ObjectInputStream(bais)

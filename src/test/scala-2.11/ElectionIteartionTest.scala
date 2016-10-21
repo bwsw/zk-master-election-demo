@@ -18,7 +18,7 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
       val agent = Agent(Random.nextInt(10).toString, Random.nextInt(4).toString, Random.nextInt(2).toString)
 
       val bool = scala.util.Random.nextBoolean()
-      if (bool) zoo.addAgentToPartrition(patrition1,agent) else zoo.addAgentToPartrition(patrition2,agent)
+      if (bool) zoo.addAgentToPartition(patrition1,agent) else zoo.addAgentToPartition(patrition2,agent)
 
       zoo.isAllPatritionsAgentsHaveTheSameLeader shouldBe true
     }
@@ -36,7 +36,7 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
       val agent = Agent(Random.nextInt(10000).toString, Random.nextInt(4000).toString, Random.nextInt(2).toString)
 
       val bool = scala.util.Random.nextBoolean()
-      if (bool) zoo.addAgentToPartrition(patrition1, agent) else zoo.addAgentToPartrition(patrition2, agent)
+      if (bool) zoo.addAgentToPartition(patrition1, agent) else zoo.addAgentToPartition(patrition2, agent)
 
       zoo.isAllPatritionsAgentsHaveTheSameLeader shouldBe true
       agent

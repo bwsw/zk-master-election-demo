@@ -57,7 +57,7 @@ class ZooTree(connectionString: String) extends Tree
 
         if (partitionsToProcess.length != partitions.length)
           throw new NoSuchElementException(s"Stream $streamName doesn't contain all of that $partitions!")
-        else partitionsToProcess foreach (partition => stream.addAgentToPartrition(partition,agent))
+        else partitionsToProcess foreach (partition => stream.addAgentToPartition(partition,agent))
       }
     }
   }
