@@ -55,15 +55,11 @@ class StreamLeaderSelector(connectionString: String, val rootPath: String) {
   TrieMap[String,  mutable.ArrayBuffer[MyLeaderSelectorClient]] = new TrieMap[String,  mutable.ArrayBuffer[MyLeaderSelectorClient]]()
 
 
-  private def randomLeader: mutable.ArrayBuffer[MyLeaderSelectorClient] => MyLeaderSelectorClient = {leaderSelectors=>
-    val index = scala.util.Random.nextInt(leaderSelectors.length)
-    leaderSelectors(index)
-  }
 
 
   //check if agent has a connection and exists in partition; then return Leader Selector
-  private def leaderSelectorOfPartition(partitionId: String): Option[MyLeaderSelectorClient] = {
-    val agentIdOpt = partitionLeaderSelectorAgents(partitionId).headOption
+  private def masterLeaderSelectorOfPartition(partitionId: String): Option[MyLeaderSelectorClient] = {
+    val agentIdOpt = partitionLeaderSelectorAgents(partitionId).find(_.hasLeadership == true)
     agentIdOpt match {
       case Some(agentLeaderSelector) =>
         if (doesAgentHaveConnection(agentLeaderSelector.id)) Some(agentLeaderSelector) else None
@@ -71,28 +67,33 @@ class StreamLeaderSelector(connectionString: String, val rootPath: String) {
     }
   }
 
-  private def changeLeaderSelectorOfPartition(partitionId: String, chooseNewLeader:
-  mutable.ArrayBuffer[MyLeaderSelectorClient] => MyLeaderSelectorClient): Unit =
-  {
-    leaderSelectorOfPartition(partitionId) foreach { leader =>
-      // ???
-      val leaderSelectorsOfPartition = partitionLeaderSelectorAgents(partitionId)
-        .filter(agent => leaderSelectorToAgent(agent).get.priority != Agent.Priority.Low)
-      val newLeader = chooseNewLeader(leaderSelectorsOfPartition)
+  private def leaderSelectorToAgent(leaderSelector: MyLeaderSelectorClient): Option[Agent] = {
+    connectionPerAgent.keys.find(agent => leaderSelector.id == agent.toString)
+  }
 
+  private def getAllLeaderSelectorsOfPartitionByPriority(partitionId: String,
+                                                 priority: Agent.Priority.Value): ArrayBuffer[MyLeaderSelectorClient] =
+  {
+    partitionLeaderSelectorAgents(partitionId).filter(agent => leaderSelectorToAgent(agent).get.priority == priority)
+  }
+
+
+
+  private def changeLeaderSelectorOfPartition(partitionId: String, chooseNewLeader:
+  mutable.ArrayBuffer[MyLeaderSelectorClient] => MyLeaderSelectorClient, priority: Agent.Priority.Value): Unit =
+  {
+    masterLeaderSelectorOfPartition(partitionId) foreach { leader =>
+      val newLeader = chooseNewLeader(getAllLeaderSelectorsOfPartitionByPriority(partitionId, priority))
       newLeader.requeue()
       leader.release()
     }
   }
 
-  private def leaderSelectorToAgent(leaderSelector: MyLeaderSelectorClient): Option[Agent] = {
-    connectionPerAgent.keys.find(agent => leaderSelector.id == agent.toString)
-  }
 
   //check if agent has a connection and exists in partition; then return agent
   private def leaderAgentOfPartition(partitionId: String): Option[Agent] = {
     if (partitionLeaderSelectorAgents.isDefinedAt(partitionId)) {
-      val agentIdOpt = partitionLeaderSelectorAgents(partitionId).headOption
+      val agentIdOpt = partitionLeaderSelectorAgents(partitionId).find(_.hasLeadership == true)
       agentIdOpt match {
         case Some(agentLeaderSelector) => leaderSelectorToAgent(agentLeaderSelector)
         case None => None
@@ -103,16 +104,22 @@ class StreamLeaderSelector(connectionString: String, val rootPath: String) {
   private def geeAllLeadersOfPartitions: mutable.Map[String,Agent] = {
     val partitionLeader = mutable.Map[String, Agent]()
     partitions foreach {partition=>
+      // foreach for Option isn't obvious
       leaderAgentOfPartition(partition) foreach (agent => partitionLeader += ((partition, agent)))
     }
     partitionLeader
+  }
+
+  private def randomLeader: mutable.ArrayBuffer[MyLeaderSelectorClient] => MyLeaderSelectorClient = {leaderSelectors=>
+    val index = scala.util.Random.nextInt(leaderSelectors.length)
+    leaderSelectors(index)
   }
 
   private def processElectionAgentByPriority(agent: Agent) = {
     def processAgent(partitionId: String, agentLeader: Agent, agent: Agent): Unit = {
       import Agent.Priority._
       (agentLeader.priority, agent.priority) match {
-        case (Low, Normal) => changeLeaderSelectorOfPartition(partitionId, randomLeader)
+        case (Low, Normal) => changeLeaderSelectorOfPartition(partitionId, randomLeader, Agent.Priority.Normal)
         case _ => Unit
       }
     }
@@ -142,22 +149,40 @@ class StreamLeaderSelector(connectionString: String, val rootPath: String) {
     }
   }
 
+
   def closeAgent(agent: Agent):Unit = {
-    partitionLeaderSelectorAgents.foreach{case(_,agentsInElection) =>
-      val agentToCloseOpt = agentsInElection.find(participantAgent=> participantAgent.id == agent.toString)
-      agentToCloseOpt match {
-        case Some(agentToClose) => {
-          agentToClose.close
-          agentsInElection -= agentToClose}
-        case None => agentsInElection
+    partitionLeaderSelectorAgents.foreach { case (partitionId, leaderSelectorsInVoting) =>
+      val leaderSelectorToCloseOpt = leaderSelectorsInVoting.find(participantAgent => participantAgent.id == agent.toString)
+      leaderSelectorToCloseOpt foreach { leaderSelectorToClose =>
+
+        if (leaderSelectorToClose.hasNotLeadership) {
+          leaderSelectorsInVoting -= leaderSelectorToClose
+          leaderSelectorToClose.close
+        } else if (leaderSelectorToAgent(leaderSelectorToClose).get.priority == Agent.Priority.Normal) {
+
+        }
+          val leaderSelectorsWithoutMaster = leaderSelectorsInVoting - leaderSelectorToClose
+
+          def test(priority: Agent.Priority.Value) =
+            leaderSelectorsWithoutMaster.filter(x=>leaderSelectorToAgent(x).get.priority == priority)
+
+          val newLeader = if (test(Agent.Priority.Normal).isEmpty)
+            randomLeader(test(Agent.Priority.Low))
+          else randomLeader(test(Agent.Priority.Normal))
+
+          newLeader.requeue()
+          leaderSelectorToClose.release()
+
+          leaderSelectorsInVoting -= leaderSelectorToClose
+          leaderSelectorToClose.close
       }
     }
   }
 
   def printPatritionAgents() = {
-    partitionLeaderSelectorAgents foreach{case (participantId, leaderSelector)=>
-      leaderSelector foreach { agent =>
-        if (agent.isStarted) println(s"$participantId/${getAgentByName(agent.id).name}\t has leader ${getAgentByName(agent.getLeader.getId).name}")
+    partitionLeaderSelectorAgents foreach { case (participantId, leaderSelector) =>
+      leaderSelector foreach { agentLeaderSelector =>
+        println(s"$participantId/${getAgentByName(agentLeaderSelector.id).name}\t has leader ${getAgentByName(agentLeaderSelector.getLeader.getId).name}")
       }
       println()
     }

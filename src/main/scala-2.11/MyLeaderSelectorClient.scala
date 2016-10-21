@@ -16,7 +16,7 @@ class MyLeaderSelectorClient(client: CuratorFramework, path: String,val id: Stri
   LeaderSelectorListenerAdapter with Closeable {
   private val leaderSelector: LeaderSelector =  new LeaderSelector(client, path, this)
   private val resettableCountDownLatch = new ResettableCountDownLatch(1)
-  private var isNotStarted = true
+  @volatile private var IS_STARTED = false
 
   leaderSelector.setId(id)
 
@@ -26,34 +26,44 @@ class MyLeaderSelectorClient(client: CuratorFramework, path: String,val id: Stri
   def start() = {
     // the selection for this instance doesn't start until the leader selector is started
     // leader selection is done in the background so this call to leaderSelector.start() returns immediately
-    if (isNotStarted) {leaderSelector.start(); isNotStarted = false} else leaderSelector.requeue()
+    if (IS_STARTED) leaderSelector.requeue() else {leaderSelector.start(); IS_STARTED = true}
   }
-  def requeue() = Thread.sleep(1); start()
 
-  def isStarted = !isNotStarted
+  def requeue() = start()
 
-  @tailrec
+  def isStarted = IS_STARTED
+
+  def hasLeadership: Boolean = leaderSelector.hasLeadership
+  def hasNotLeadership: Boolean = !hasLeadership
+
   final def getLeader: Participant = {
     import org.apache.zookeeper.KeeperException.NoNodeException
-
-    val timeToSleep = 10L
-    val tryGetLeader = scala.util.Try(leaderSelector.getLeader)
-    tryGetLeader match {
-      case Success(leader) => if (leader.getId == "") {Thread.sleep(timeToSleep); getLeader} else leader
-      case Failure(error) => error match {
-        case noNode: NoNodeException => {
-          Thread.sleep(timeToSleep); getLeader
+    def timeToSleep = TimeUnit.MILLISECONDS.sleep(30L)
+    @tailrec
+    def helper(times: Int): Participant = {
+      val tryGetLeader = scala.util.Try(leaderSelector.getLeader)
+      tryGetLeader match {
+        case Success(leader) => if (leader.getId == "") {
+          timeToSleep
+          helper(times-1)
+        } else leader
+        case Failure(error) => error match {
+          case noNode: NoNodeException => {
+            timeToSleep
+            helper(times - 1)
+          }
+          case _ => throw error
         }
-        case _ => throw error
       }
     }
+    helper(5)
   }
 
   def release() = {
     //Thread sleep makes a differ ,otherwise it shouldn't work properly
-    val timeToSleep = 30L
+    def timeToSleep = TimeUnit.MILLISECONDS.sleep(100L)
     resettableCountDownLatch.countDown()
-    Thread.sleep(timeToSleep)
+    timeToSleep
     resettableCountDownLatch.reset
   }
 

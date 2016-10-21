@@ -22,7 +22,8 @@ trait Agent extends Serializable {
       (that canEqual this) &&
         address == that.address &&
         port == that.port &&
-        id == that.id
+        id == that.id &&
+        priority == that.priority
     }
     case _ => false
   }
