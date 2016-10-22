@@ -9,7 +9,7 @@ import scala.collection.mutable.ArrayBuffer
 
 object MyLeaderSelector extends App {
   private val CLIENT_QTY: Int = 1
-  private val PATH: String = "/examples/leader"
+  private val PATH: String = "/examples/leader4"
   // all of the useful sample code is in ExampleClient.java
   System.out.println("Create " + CLIENT_QTY + " clients, have each negotiate for leadership and then wait a random number of seconds before letting another leader election occur.")
   System.out.println("Notice that leader election is fair: all clients will become leader and will do so the same number of times.")
@@ -17,7 +17,7 @@ object MyLeaderSelector extends App {
 
   val clients: ArrayBuffer[CuratorFramework] = ArrayBuffer()
   val examples: ArrayBuffer[MyLeaderSelectorClient] = ArrayBuffer()
-  val connectionString = "172.17.0.2:2181"
+  val connectionString = "192.168.99.100:32770"
   try {
     (0 to CLIENT_QTY) foreach { i =>
       val client = CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(100, 2))
@@ -47,7 +47,7 @@ object MyLeaderSelector extends App {
 
   examples(exampleNewLeaderIndex).release()
 
-  examples(exampleOldLeaderIndex).requeue
+  examples(exampleOldLeaderIndex).requeue()
 
   examples foreach(example=> println(example.getLeader))
   println()
