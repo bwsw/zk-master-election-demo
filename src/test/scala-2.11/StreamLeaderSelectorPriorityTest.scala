@@ -31,7 +31,7 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     zoo.close()
   }
 
-  it should "not fail if we try to+ delete agent that doesn't exits in partition" in {
+  it should "not fail if we try to delete agent that doesn't exits in partition" in {
     val zookeeperConnectionString = "172.17.0.2:2181"
     val zoo = new StreamLeaderSelectorPriority(zookeeperConnectionString, "/participant")
     val partition = zoo.addPartition()

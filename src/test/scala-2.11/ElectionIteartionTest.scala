@@ -13,7 +13,7 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
     val patrition1 = zoo.addPartition()
     val patrition2 = zoo.addPartition()
 
-    val iterationNumber = 25
+    val iterationNumber = 5
     (1 to iterationNumber).foreach{_=>
       val agent = Agent(Random.nextInt(10).toString, Random.nextInt(4).toString, Random.nextInt(2).toString)
 
@@ -31,7 +31,7 @@ class ElectionIteartionTest extends FlatSpec with Matchers {
     val patrition1 = zoo.addPartition()
     val patrition2 = zoo.addPartition()
 
-    val iterationNumber = 25
+    val iterationNumber = 5
     val agents = (1 to iterationNumber).toList.map { _ =>
       val agent = Agent(Random.nextInt(10000).toString, Random.nextInt(4000).toString, Random.nextInt(2).toString)
 

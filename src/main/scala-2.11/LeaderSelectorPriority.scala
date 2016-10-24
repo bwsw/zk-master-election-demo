@@ -15,6 +15,8 @@ class LeaderSelectorPriority(val path: String) extends Closeable {
     case None => None
   }
 
+  def isAllLeaderSelectorsHaveTheSameLeader: Boolean = leaderSelectorsWithPriorities.map(_._1.getLeader).distinct.length == 1
+
   def close(): Unit = leaderSelectorsWithPriorities foreach (_._1.close())
 
   private def chooseLeader(currentLeader: MyLeaderSelectorClient, newLeader: MyLeaderSelectorClient) = {
@@ -96,32 +98,4 @@ object LeaderSelectorPriority extends App {
     if (voters.nonEmpty) voters(scala.util.Random.nextInt(voters.length))
     else throw new Exception("Bug!")
   }
-
-
-  private val CLIENT_QTY: Int = 7
-  private val PATH: String = "/examples/leader0"
-
-  val stream = new LeaderSelectorPriority(PATH)
-
-  val connectionString = "172.17.0.2:2181"
-
-  val clients: ArrayBuffer[CuratorFramework] = ArrayBuffer()
-
-
-  (1 to CLIENT_QTY) foreach { i =>
-    val client = CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(100, 2))
-    clients += client
-    client.start()
-    stream.addId("Client #" + i, Priority.Low, client)
-  }
-
-  val client = CuratorFrameworkFactory.newClient(connectionString, new ExponentialBackoffRetry(100, 2))
-  client.start()
-  stream.addId("Client #" + CLIENT_QTY+1, Priority.Normal, client)
-
-  stream.removeId("Client #" + CLIENT_QTY+1)
-
-  println(stream.getLeaderId)
-
-  clients foreach(_.close())
 }

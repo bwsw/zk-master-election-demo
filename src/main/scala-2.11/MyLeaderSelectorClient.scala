@@ -92,7 +92,3 @@ class MyLeaderSelectorClient(client: CuratorFramework,val path: String,val id: S
   @throws[Exception]
   def takeLeadership(client: CuratorFramework) {resettableCountDownLatch.await()}
 }
-
-object MyLeaderSelectorClient {
-  //val resettableCountDownLatch = new ResettableCountDownLatch(1)
-}

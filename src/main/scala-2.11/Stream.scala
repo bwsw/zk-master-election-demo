@@ -4,6 +4,7 @@ import org.apache.curator.framework.recipes.leader.LeaderLatch
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.CreateMode
+import org.apache.zookeeper.KeeperException.NoNodeException
 
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
@@ -141,11 +142,15 @@ class Stream(connectionString: String, val rootPath: String) {
 
   def isAllPatritionsAgentsHaveTheSameLeader: Boolean = {
     val agentsInVotingOfParticipants = partitionAgents.values
-
-    @tailrec
+    
     def helper(lst: List[LeaderLatch], leader: LeaderLatch): Boolean = lst match {
       case Nil => true
-      case head::tail => if (head.getLeader == leader.getLeader) helper(tail,leader) else false
+      case head::tail => {
+        try {if (head.getLeader == leader.getLeader) helper(tail,leader) else false}
+        catch {
+          case noNode:NoNodeException => helper(lst,leader)
+        }
+      }
     }
 
     var isTheSameLeader = true
