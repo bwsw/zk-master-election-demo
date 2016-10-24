@@ -59,6 +59,7 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     zoo.addAgentToPartition(partition,agent3)
     zoo.addAgentToPartition(partition,agent4)
 
+
     val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Normal)
     zoo.addAgentToPartition(partition,agent5)
 
@@ -76,14 +77,13 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     val agent2 = Agent("192.168.0.2","2222","1", Agent.Priority.Normal)
     val agent3 = Agent("192.168.0.3","3333","1", Agent.Priority.Normal)
     val agent4 = Agent("192.168.0.4","4444","1", Agent.Priority.Normal)
+    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Normal)
 
     zoo.addAgentToPartition(partition,agent1)
     zoo.addAgentToPartition(partition,agent2)
     zoo.addAgentToPartition(partition,agent3)
     zoo.addAgentToPartition(partition,agent4)
-
-    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Normal)
-    zoo.addAgentToPartition(partition, agent5)
+    zoo.addAgentToPartition(partition,agent5)
 
     zoo.getPartitionLeaderOpt(partition) shouldBe Some(agent1)
 
@@ -99,14 +99,13 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     val agent2 = Agent("192.168.0.2","2222","1", Agent.Priority.Normal)
     val agent3 = Agent("192.168.0.3","3333","1", Agent.Priority.Normal)
     val agent4 = Agent("192.168.0.4","4444","1", Agent.Priority.Normal)
+    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Normal)
 
     zoo.addAgentToPartition(partition,agent1)
     zoo.addAgentToPartition(partition,agent2)
     zoo.addAgentToPartition(partition,agent3)
     zoo.addAgentToPartition(partition,agent4)
-
-    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Normal)
-    zoo.addAgentToPartition(partition, agent5)
+    zoo.addAgentToPartition(partition,agent5)
 
     zoo.closeAgent(agent1)
     val agentsOpt = Some(agent2) :: Some(agent3) :: Some(agent4) :: Some(agent5) :: Nil
@@ -163,8 +162,6 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Low)
     zoo.addAgentToPartition(partition,agent5)
 
-
-    //посмотреть, что не так с приоритетами
     zoo.getPartitionLeaderOpt(partition) shouldBe Some(agent1)
 
     zoo.close()
@@ -210,11 +207,10 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
 
     val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Low)
     zoo.addAgentToPartition(partition,agent5)
-
     zoo.closeAgent(agent5)
-    val agentsOpt = Some(agent1) :: Some(agent2) :: Some(agent3) :: Some(agent4) :: Nil
 
-    agentsOpt should contain (zoo.getPartitionLeaderOpt(partition))
+
+    zoo.getPartitionLeaderOpt(partition) shouldBe Some(agent1)
 
     zoo.close()
   }
@@ -228,14 +224,15 @@ class StreamLeaderSelectorPriorityTest extends FlatSpec with Matchers {
     val agent2 = Agent("192.168.0.2","2222","1", Agent.Priority.Low)
     val agent3 = Agent("192.168.0.3","3333","1", Agent.Priority.Low)
     val agent4 = Agent("192.168.0.4","4444","1", Agent.Priority.Low)
+    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Low)
 
     zoo.addAgentToPartition(partition,agent1)
     zoo.addAgentToPartition(partition,agent2)
     zoo.addAgentToPartition(partition,agent3)
     zoo.addAgentToPartition(partition,agent4)
-
-    val agent5 = Agent("192.168.0.5","5555","1", Agent.Priority.Low)
     zoo.addAgentToPartition(partition,agent5)
+
+
     zoo.closeAgent(agent1)
 
     val agentsOpt = Some(agent2) :: Some(agent3) :: Some(agent4) :: Some(agent5) :: Nil

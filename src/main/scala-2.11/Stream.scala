@@ -142,7 +142,7 @@ class Stream(connectionString: String, val rootPath: String) {
 
   def isAllPatritionsAgentsHaveTheSameLeader: Boolean = {
     val agentsInVotingOfParticipants = partitionAgents.values
-    
+
     def helper(lst: List[LeaderLatch], leader: LeaderLatch): Boolean = lst match {
       case Nil => true
       case head::tail => {
