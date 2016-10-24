@@ -80,7 +80,7 @@ class StreamLeaderSelectorPriority(connectionString: String, val rootPath: Strin
   }
 
 
-  def closeAgent(agent: Agent):Unit = {
+  def deleteAndCloseAgent(agent: Agent):Unit = {
     partitions.foreach(leaderSelectorPriority => leaderSelectorPriority.removeId(agent.toString))
     partitionAgents foreach {case (_,agents) =>
       agents.find(_ == agent).foreach(agentToClose => agents -= agentToClose)
