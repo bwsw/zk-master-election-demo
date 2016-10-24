@@ -1,3 +1,5 @@
+import java.io.Closeable
+
 import LeaderSelectorPriority.Priority
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
@@ -5,10 +7,15 @@ import org.apache.curator.retry.ExponentialBackoffRetry
 import scala.collection.mutable.ArrayBuffer
 
 
-class LeaderSelectorPriority(path: String) {
-  val leaderSelectorsWithPriorities: ArrayBuffer[(MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value)] = new ArrayBuffer()
+class LeaderSelectorPriority(val path: String) extends Closeable {
+  private val leaderSelectorsWithPriorities: ArrayBuffer[(MyLeaderSelectorClient, Priority.Value)] = new ArrayBuffer()
 
-  def getLeader = leaderSelectorsWithPriorities.head._1.getLeader
+  final def getLeaderId = leaderSelectorsWithPriorities.headOption match {
+    case Some(leader) => Some(leader._1.getLeader.getId)
+    case None => None
+  }
+
+  def close(): Unit = leaderSelectorsWithPriorities foreach (_._1.close())
 
   private def chooseLeader(currentLeader: MyLeaderSelectorClient, newLeader: MyLeaderSelectorClient) = {
     currentLeader.release()
@@ -16,8 +23,8 @@ class LeaderSelectorPriority(path: String) {
   }
 
   private def votersAndLeader: (
-    ArrayBuffer[(MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value)],
-    (MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value)
+    ArrayBuffer[(MyLeaderSelectorClient, Priority.Value)],
+    (MyLeaderSelectorClient, Priority.Value)
   ) = {
     val currentLeaderIndex = leaderSelectorsWithPriorities.indexWhere(_._1.hasLeadership)
     val currentLeader = leaderSelectorsWithPriorities(currentLeaderIndex)
@@ -25,9 +32,14 @@ class LeaderSelectorPriority(path: String) {
     (votersWithoutLeader, currentLeader)
   }
 
-  def addId(id: String, priority: LeaderSelectorPriority.Priority.Value, client: CuratorFramework): Unit = {
+  final def addId(id: String, priority: LeaderSelectorPriority.Priority.Value, client: CuratorFramework): Unit = {
     val leader = new MyLeaderSelectorClient(client,path,id)
-    leaderSelectorsWithPriorities += ((leader, priority))
+
+    this.synchronized {
+      if (!leaderSelectorsWithPriorities.exists(_._1.id == leader.id))
+        leaderSelectorsWithPriorities += ((leader, priority))
+    }
+
     if (leaderSelectorsWithPriorities.size == 1) {
       leader.start()
     } else {
@@ -37,21 +49,21 @@ class LeaderSelectorPriority(path: String) {
     }
   }
 
-  private def getRandomLeader(voters: ArrayBuffer[MyLeaderSelectorClient]): MyLeaderSelectorClient = {
-    if (voters.nonEmpty) voters(scala.util.Random.nextInt(voters.length))
-    else throw new Exception("Bug!")
-  }
+  final def removeId(id:String):Unit = {
+    leaderSelectorsWithPriorities.find(_._1.id == id) match {
+      case Some(leaderSelector) => {
+        val (votersWithoutLeader, currentLeader) = votersAndLeader
+        if (currentLeader == leaderSelector)
+          processDelete(votersWithoutLeader, currentLeader, LeaderSelectorPriority.getRandomLeader)
 
-  def removeId(id:String):Unit = {
-    leaderSelectorsWithPriorities.find(_._1.id == id) foreach {
-    val (votersWithoutLeader, currentLeader) = votersAndLeader
-    processDelete(votersWithoutLeader, currentLeader, getRandomLeader)
-    leaderSelectorsWithPriorities -= _
+        leaderSelectorsWithPriorities -= leaderSelector
+      }
+      case None => None
     }
   }
 
-  def processCreate(currentLeader: (MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value),
-                    newLeader: (MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value)
+  protected def processCreate(currentLeader: (MyLeaderSelectorClient, Priority.Value),
+                    newLeader: (MyLeaderSelectorClient, Priority.Value)
                    ): Unit = {
 
     if (newLeader._2 == Priority.Normal && currentLeader._2 == Priority.Low)
@@ -59,8 +71,8 @@ class LeaderSelectorPriority(path: String) {
   }
 
 
-  def processDelete(voters: ArrayBuffer[(MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value)],
-                    currentLeader: (MyLeaderSelectorClient, LeaderSelectorPriority.Priority.Value),
+  protected def processDelete(voters: ArrayBuffer[(MyLeaderSelectorClient, Priority.Value)],
+                    currentLeader: (MyLeaderSelectorClient, Priority.Value),
                     randomFunction: ArrayBuffer[MyLeaderSelectorClient] => MyLeaderSelectorClient
                    ): Unit = {
     if (voters.isEmpty) currentLeader._1.release()
@@ -80,13 +92,18 @@ object LeaderSelectorPriority extends App {
     val Normal, Low = Value
   }
 
+  def getRandomLeader(voters: ArrayBuffer[MyLeaderSelectorClient]): MyLeaderSelectorClient = {
+    if (voters.nonEmpty) voters(scala.util.Random.nextInt(voters.length))
+    else throw new Exception("Bug!")
+  }
+
 
   private val CLIENT_QTY: Int = 7
   private val PATH: String = "/examples/leader0"
 
   val stream = new LeaderSelectorPriority(PATH)
 
-  val connectionString = "192.168.99.100:32770"
+  val connectionString = "172.17.0.2:2181"
 
   val clients: ArrayBuffer[CuratorFramework] = ArrayBuffer()
 
@@ -104,7 +121,7 @@ object LeaderSelectorPriority extends App {
 
   stream.removeId("Client #" + CLIENT_QTY+1)
 
-  println(stream.getLeader)
+  println(stream.getLeaderId)
 
   clients foreach(_.close())
 }
